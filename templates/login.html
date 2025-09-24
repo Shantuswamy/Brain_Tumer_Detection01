@@ -1,0 +1,149 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Login - Brain Tumor Detection</title>
+  <style>
+    body {
+      background: #f0f4f8;
+      font-family: Arial, sans-serif;
+      margin: 0;
+      min-height: 100vh;
+      position: relative;
+      overflow: hidden;
+    }
+    .bg-video {
+      position: fixed;
+      right: 0;
+      bottom: 0;
+      min-width: 100vw;
+      min-height: 100vh;
+      width: auto;
+      height: auto;
+      z-index: -1;
+      object-fit: cover;
+      opacity: 0.7;
+    }
+    .login-container {
+      background: rgba(255,255,255,0.95);
+      padding: 30px;
+      border-radius: 12px;
+      box-shadow: 0px 5px 15px rgba(0,0,0,0.2);
+      width: 320px;
+      text-align: center;
+      margin: 10vh auto;
+      position: relative;
+      z-index: 1;
+    }
+    .form-box input {
+      width: 100%;
+      padding: 12px;
+      margin: 10px 0;
+      border-radius: 8px;
+      border: 1px solid #ccc;
+      outline: none;
+    }
+    .form-box button {
+      width: 100%;
+      padding: 12px;
+      background: #2980b9;
+      color: #fff;
+      border: none;
+      border-radius: 8px;
+      cursor: pointer;
+    }
+    .form-box button:hover { background: #1f618d; }
+    .switch-text {
+      margin-top: 12px;
+      font-size: 14px;
+    }
+    .switch-text a {
+      color: #2980b9;
+      cursor: pointer;
+      text-decoration: underline;
+    }
+    .error {
+      color: red;
+      text-align: center;
+      font-size: 14px;
+      margin-top: 10px;
+    }
+    .hidden { display: none; }
+  </style>
+</head>
+<body>
+  <!-- Background Video -->
+  <video autoplay muted loop class="bg-video">
+    <source src="{{ url_for('static', filename='background.mp4') }}" type="video/mp4">
+    Your browser does not support the video tag.
+  </video>
+
+  <div class="login-container">
+    <h2>Brain Tumor Detection</h2>
+    <!-- Login Form -->
+    <form id="loginForm" class="form-box">
+      <input type="text" id="loginUser" placeholder="Username" required>
+      <input type="password" id="loginPass" placeholder="Password" required>
+      <button type="submit">Login</button>
+      <p class="switch-text">Don't have an account? <a id="showRegister">Register</a></p>
+    </form>
+    <!-- Registration Form (hidden by default) -->
+    <form id="registerForm" class="form-box hidden">
+      <input type="text" id="regUser" placeholder="New Username" required>
+      <input type="password" id="regPass" placeholder="New Password" required>
+      <button type="submit">Register</button>
+      <p class="switch-text">Already have an account? <a id="showLogin">Login</a></p>
+    </form>
+    <p id="errorMsg" class="error"></p>
+  </div>
+  <script>
+    const loginForm = document.getElementById('loginForm');
+    const registerForm = document.getElementById('registerForm');
+    const showRegister = document.getElementById('showRegister');
+    const showLogin = document.getElementById('showLogin');
+    const errorMsg = document.getElementById('errorMsg');
+
+    showRegister.addEventListener('click', (e) => {
+      e.preventDefault();
+      loginForm.classList.add('hidden');
+      registerForm.classList.remove('hidden');
+      errorMsg.textContent = '';
+    });
+    showLogin.addEventListener('click', (e) => {
+      e.preventDefault();
+      registerForm.classList.add('hidden');
+      loginForm.classList.remove('hidden');
+      errorMsg.textContent = '';
+    });
+    registerForm.addEventListener('submit', (e) => {
+      e.preventDefault();
+      const username = document.getElementById('regUser').value.trim();
+      const password = document.getElementById('regPass').value.trim();
+      if (username && password) {
+        localStorage.setItem('username', username);
+        localStorage.setItem('password', password);
+        alert('Registration successful! Please log in.');
+        registerForm.classList.add('hidden');
+        loginForm.classList.remove('hidden');
+      } else {
+        errorMsg.textContent = '⚠️ Please fill all fields.';
+      }
+    });
+    loginForm.addEventListener('submit', (e) => {
+      e.preventDefault();
+      const loginUser = document.getElementById('loginUser').value.trim();
+      const loginPass = document.getElementById('loginPass').value.trim();
+      const storedUser = localStorage.getItem('username');
+      const storedPass = localStorage.getItem('password');
+      if (!loginUser || !loginPass) {
+        errorMsg.textContent = '⚠️ Please enter username and password.';
+      } else if (loginUser === storedUser && loginPass === storedPass) {
+        errorMsg.textContent = '';
+        window.location.href = '/'; // Redirect to main page
+      } else {
+        errorMsg.textContent = '❌ Invalid username or password!';
+      }
+    });
+  </script>
+</body>
+</html>

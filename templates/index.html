@@ -1,0 +1,211 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Brain Tumor Detection</title>
+  <style>
+    body { font-family: Arial; background: #f0f4f8; margin: 0; color: #333; }
+    .hidden { display: none; }
+    header { background: #3f51b5; color: white; padding: 1rem; text-align: center; }
+    nav a { color: white; margin-left: 1rem; text-decoration: none; background: #ff4d4d; padding: 8px 18px; border-radius:6px;}
+    nav a:hover { background: #e60000; }
+    .main-body { min-height: 100vh; display: flex; flex-direction: column; align-items: center; padding:2rem;}
+    .upload-section, .result-section { background:white; padding:1rem; border-radius:10px; box-shadow:0 4px 10px rgba(0,0,0,0.1); width:90%; max-width:600px; margin-bottom:2rem; text-align:center;}
+    input[type="file"], select { margin:0.5rem 0; padding:0.5rem; width:90%; max-width:300px; }
+    button { padding:0.5rem 1.5rem; border:none; border-radius:5px; cursor:pointer; margin:0.5rem; }
+    #previewImg, .batch-preview-img { max-width:120px; margin:5px; border-radius:8px; border:2px solid #3f51b5; }
+    #confMatrixCanvas { margin-top:1rem; }
+  </style>
+</head>
+<body>
+
+<header>
+  <h1>Brain Tumor Detection System</h1>
+  <nav><a href="/login">Logout</a></nav>
+</header>
+
+<div class="main-body">
+
+  <!-- Upload Section -->
+  <section class="upload-section">
+    <h2>Choose Prediction Mode</h2>
+    <label><input type="radio" name="mode" value="single" checked> Single Image</label>
+    <label style="margin-left:2em;"><input type="radio" name="mode" value="batch"> Batch Upload</label>
+
+    <!-- Single Image Form -->
+    <form id="uploadForm">
+      <input type="file" id="mriInput" accept="image/*" required>
+      <button type="submit">Analyze</button>
+      <div id="loader" class="hidden">Processing...</div>
+      <img id="previewImg" alt="MRI Preview">
+    </form>
+
+    <!-- Batch Upload Form -->
+    <div id="batchForm" class="hidden">
+      <input type="file" id="batchInput" accept="image/*" multiple>
+      <div id="batchPreview"></div>
+      <div id="batchLabelSelectors"></div>
+      <button id="analyseBtn" class="hidden" style="background:#4CAF50; color:white;">Analyse</button>
+      <canvas id="confMatrixCanvas" width="400" height="400"></canvas>
+      <div id="batchResults"></div>
+    </div>
+
+  </section>
+
+  <!-- Result Section -->
+  <section class="result-section">
+    <h2>Result</h2>
+    <p id="resultText">Upload an MRI scan to check for tumor detection.</p>
+  </section>
+
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chartjs-chart-matrix@1.1.0/dist/chartjs-chart-matrix.min.js"></script>
+
+<script>
+const CLASS_NAMES = ["No Tumor", "Glioma", "Meningioma", "Pituitary"];
+let confMatrixChart = null;
+
+// Mode switch
+document.querySelectorAll('input[name="mode"]').forEach(radio=>{
+  radio.addEventListener('change', function(){
+    document.getElementById('uploadForm').classList.toggle('hidden', this.value!=='single');
+    document.getElementById('batchForm').classList.toggle('hidden', this.value!=='batch');
+  });
+});
+
+// Single image preview
+const mriInput = document.getElementById('mriInput');
+const previewImg = document.getElementById('previewImg');
+mriInput.addEventListener('change', function(){
+  const file = this.files[0];
+  if(file){
+    const reader = new FileReader();
+    reader.onload = e=> { previewImg.src=e.target.result; previewImg.style.display='block'; }
+    reader.readAsDataURL(file);
+  }
+});
+
+// Single image analyze
+document.getElementById('uploadForm').addEventListener('submit', async e=>{
+  e.preventDefault();
+  if(!mriInput.files.length) return alert('Upload MRI');
+  const formData = new FormData();
+  formData.append('file', mriInput.files[0]);
+  const res = await fetch('/predict', {method:'POST', body: formData});
+  const data = await res.json();
+  document.getElementById('resultText').innerHTML = `Prediction: ${data.prediction} (Confidence: ${(data.confidence*100).toFixed(2)}%)`;
+});
+
+// Batch upload preview & label selectors
+const batchInput = document.getElementById('batchInput');
+const batchPreview = document.getElementById('batchPreview');
+const batchLabelSelectors = document.getElementById('batchLabelSelectors');
+const analyseBtn = document.getElementById('analyseBtn');
+const batchResults = document.getElementById('batchResults');
+
+batchInput.addEventListener('change', function(){
+  batchPreview.innerHTML = '';
+  batchLabelSelectors.innerHTML = '';
+  const files = Array.from(this.files);
+  if(!files.length){ analyseBtn.classList.add('hidden'); return; }
+  analyseBtn.classList.remove('hidden');
+
+  files.forEach((file,i)=>{
+    // Preview
+    const reader = new FileReader();
+    reader.onload = e=>{
+      const img = document.createElement('img');
+      img.src = e.target.result;
+      img.className='batch-preview-img';
+      batchPreview.appendChild(img);
+    }
+    reader.readAsDataURL(file);
+
+    // Label selector
+    const sel = document.createElement('select');
+    sel.name = 'label_'+i;
+    CLASS_NAMES.forEach(cls=>{
+      const opt = document.createElement('option'); opt.value=cls; opt.textContent=cls; sel.appendChild(opt);
+    });
+    const lbl = document.createElement('label');
+    lbl.textContent=`True label for ${file.name}: `;
+    lbl.appendChild(sel);
+    batchLabelSelectors.appendChild(lbl);
+    batchLabelSelectors.appendChild(document.createElement('br'));
+  });
+});
+
+// Batch analyze
+analyseBtn.addEventListener('click', async ()=>{
+  const files = Array.from(batchInput.files);
+  if(!files.length) return alert("No files selected");
+
+  const formData = new FormData();
+  const trueLabels = [];
+  files.forEach((file,i)=>{
+    formData.append('files', file);
+    const sel = document.querySelector(`select[name="label_${i}"]`);
+    trueLabels.push(sel.value);
+  });
+  trueLabels.forEach(label=>formData.append('true_labels[]', label));
+
+  batchResults.innerHTML = 'Analysing batch...';
+
+  try{
+    const res = await fetch('/predict_batch', {method:'POST', body: formData});
+    const data = await res.json();
+    if(!data.results || !data.results.length){ batchResults.innerHTML='No predictions'; return; }
+
+    // Show results
+    batchResults.innerHTML='';
+    data.results.forEach(r=>{
+      batchResults.innerHTML += `<div><strong>File:</strong> ${r.filename} | <strong>True:</strong> ${r.true_label} | <strong>Pred:</strong> ${r.prediction} (Confidence: ${(r.confidence*100).toFixed(2)}%)</div>`;
+    });
+
+    
+    // Show confusion matrix
+    const tLabels = data.results.map(r=>r.true_label);
+    const pLabels = data.results.map(r=>r.prediction);
+    showConfMatrix(tLabels,pLabels);
+
+  }catch(err){
+    console.error(err);
+    batchResults.innerHTML='Error analyzing batch';
+  }
+});
+
+// Confusion matrix as bar chart
+function showConfMatrix(trueLabels,predLabels){
+  const n = CLASS_NAMES.length;
+  const matrix = Array.from({length:n},()=>Array(n).fill(0));
+  for(let i=0;i<trueLabels.length;i++){
+    const t = CLASS_NAMES.indexOf(trueLabels[i]);
+    const p = CLASS_NAMES.indexOf(predLabels[i]);
+    if(t>=0 && p>=0) matrix[t][p]++;
+  }
+  const ctx = document.getElementById('confMatrixCanvas').getContext('2d');
+  if(confMatrixChart) confMatrixChart.destroy();
+  confMatrixChart = new Chart(ctx,{
+    type:'bar',
+    data:{
+      labels:CLASS_NAMES,
+      datasets: matrix.map((row,i)=>({
+        label:CLASS_NAMES[i],
+        data: row,
+        backgroundColor: row.map(v=>v===0?'#eee':'#3f51b5')
+      }))
+    },
+    options:{responsive:true, plugins:{title:{display:true,text:'Confusion Matrix'}}}
+  });
+}
+
+
+
+</script>
+
+</body>
+</html>
